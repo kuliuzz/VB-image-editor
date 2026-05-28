@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useRef, RefObject } from "react";
 import { useEditorStore, currentOps } from "../store/editorStore";
-import { Op, CropOp } from "../types";
-import { getEffectiveDimensions } from "../utils/opsHelpers";
+import { Op, CropOp, RotateOp } from "../types";
+import { getEffectiveDimensions, transformCropForRotation } from "../utils/opsHelpers";
 
 interface Props {
   onCropMode: () => void;
@@ -56,6 +56,34 @@ export default function Toolbar({ onCropMode, cropMode, canvasRef }: Props) {
     }
   };
 
+  const handleRotate = (degrees: 90 | 270) => {
+    const existingCrop   = ops.find((op): op is CropOp   => op.type === "crop");
+    const existingRotate = ops.find((op): op is RotateOp => op.type === "rotate");
+
+    if (existingCrop && sourceImage) {
+      // Compute stage1 dimensions with the CURRENT (pre-new-rotation) total rotation
+      const currentDegrees    = existingRotate?.degrees ?? 0;
+      const dimensionsSwapped = currentDegrees === 90 || currentDegrees === 270;
+      const stageWidth  = dimensionsSwapped ? sourceImage.naturalHeight : sourceImage.naturalWidth;
+      const stageHeight = dimensionsSwapped ? sourceImage.naturalWidth  : sourceImage.naturalHeight;
+
+      // Compute new total rotation
+      const newDegrees = ((currentDegrees + degrees) % 360) as 0 | 90 | 180 | 270;
+
+      // Transform crop to the new coordinate space and update both ops atomically
+      const transformedCrop = transformCropForRotation(existingCrop, degrees, stageWidth, stageHeight);
+      const opsWithoutRotateAndCrop = ops.filter((op) => op.type !== "rotate" && op.type !== "crop");
+      const updatedOps: Op[] = [
+        ...opsWithoutRotateAndCrop,
+        transformedCrop,
+        ...(newDegrees !== 0 ? [{ type: "rotate" as const, degrees: newDegrees }] : []),
+      ];
+      store.pushOpsSnapshot(updatedOps);
+    } else {
+      store.pushOp({ type: "rotate", degrees });
+    }
+  };
+
   const applyResize = () => {
     const w = parseInt(resizeW);
     const h = parseInt(resizeH);
@@ -88,8 +116,8 @@ export default function Toolbar({ onCropMode, cropMode, canvasRef }: Props) {
       <div className="flex flex-col gap-1">
         <span className="text-xs text-gray-400 font-medium">Rotate</span>
         <div className="flex gap-1">
-          <ToolBtn onClick={() => store.pushOp({ type: "rotate", degrees: 270 })}>↺ Left</ToolBtn>
-          <ToolBtn onClick={() => store.pushOp({ type: "rotate", degrees: 90  })}>↻ Right</ToolBtn>
+          <ToolBtn onClick={() => handleRotate(270)}>↺ Left</ToolBtn>
+          <ToolBtn onClick={() => handleRotate(90)}>↻ Right</ToolBtn>
         </div>
       </div>
 

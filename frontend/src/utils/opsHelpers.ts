@@ -1,4 +1,4 @@
-// Utility functions for working with edit operations: computing current image dimensions and converting crop selections from percent coordinates to canvas buffer pixel coordinates.
+// Utility functions for working with edit operations: computing current image dimensions, converting crop selections from percent coordinates to canvas buffer pixel coordinates, and transforming crop coordinates when a rotation is applied.
 
 import { Op, RotateOp, CropOp } from "../types";
 
@@ -19,6 +19,34 @@ export function getEffectiveDimensions(
     return { width: Math.round(cropOp.width), height: Math.round(cropOp.height) };
   }
   return { width: rotatedWidth, height: rotatedHeight };
+}
+
+// Transforms a crop rectangle to remain visually correct after a 90° rotation.
+// stageWidth/stageHeight are the canvas dimensions BEFORE the new rotation is applied.
+export function transformCropForRotation(
+  crop: CropOp,
+  rotationDelta: 90 | 270,
+  stageWidth: number,
+  stageHeight: number
+): CropOp {
+  if (rotationDelta === 90) {
+    // 90° CW: pixel (sx, sy) → (stageHeight − sy − 1, sx)
+    return {
+      type: "crop",
+      x: stageHeight - crop.y - crop.height,
+      y: crop.x,
+      width: crop.height,
+      height: crop.width,
+    };
+  }
+  // 270° CW (90° CCW): pixel (sx, sy) → (sy, stageWidth − sx − 1)
+  return {
+    type: "crop",
+    x: crop.y,
+    y: stageWidth - crop.x - crop.width,
+    width: crop.height,
+    height: crop.width,
+  };
 }
 
 export function cropPercentToPixels(

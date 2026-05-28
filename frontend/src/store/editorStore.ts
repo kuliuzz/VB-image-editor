@@ -20,6 +20,7 @@ interface EditorState {
   setSourceImage: (img: HTMLImageElement | null) => void;
   setOps: (ops: Op[]) => void;
   pushOp: (op: Op) => void;
+  pushOpsSnapshot: (ops: Op[]) => void;
   removeOpType: (type: Op["type"]) => void;
   dismissHistoryWarning: () => void;
   undo: () => void;
@@ -54,19 +55,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set((state) => {
       const currentSnapshot = state.opsHistory[state.historyIndex];
       const updatedOps = mergeOp(currentSnapshot, op);
-      let newHistory = [...state.opsHistory.slice(0, state.historyIndex + 1), updatedOps];
-
-      const hitLimit = newHistory.length === HISTORY_LIMIT && !state.showHistoryWarning;
-      if (newHistory.length > HISTORY_LIMIT) {
-        newHistory = newHistory.slice(1);
-      }
-
-      return {
-        opsHistory: newHistory,
-        historyIndex: newHistory.length - 1,
-        showHistoryWarning: hitLimit ? true : state.showHistoryWarning,
-      };
+      return appendToHistory(state, updatedOps);
     }),
+
+  pushOpsSnapshot: (ops) =>
+    set((state) => appendToHistory(state, ops)),
 
   dismissHistoryWarning: () => set({ showHistoryWarning: false }),
 
@@ -89,6 +82,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
 export function currentOps(s: EditorState): Op[] {
   return s.opsHistory[s.historyIndex] ?? [];
+}
+
+function appendToHistory(state: EditorState, newSnapshot: Op[]) {
+  let newHistory = [...state.opsHistory.slice(0, state.historyIndex + 1), newSnapshot];
+  const hitLimit = newHistory.length === HISTORY_LIMIT && !state.showHistoryWarning;
+  if (newHistory.length > HISTORY_LIMIT) newHistory = newHistory.slice(1);
+  return {
+    opsHistory: newHistory,
+    historyIndex: newHistory.length - 1,
+    showHistoryWarning: hitLimit ? true : state.showHistoryWarning,
+  };
 }
 
 function mergeOp(ops: Op[], incomingOp: Op): Op[] {
