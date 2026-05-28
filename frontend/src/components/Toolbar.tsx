@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useRef, RefObject } from "react";
 import { useEditorStore, currentOps } from "../store/editorStore";
-import { Op, CropOp, RotateOp } from "../types";
-import { getEffectiveDimensions, transformCropForRotation } from "../utils/opsHelpers";
+import { Op, CropOp, RotateOp, FlipOp } from "../types";
+import { getEffectiveDimensions, transformCropForRotation, transformCropForFlip } from "../utils/opsHelpers";
 
 interface Props {
   onCropMode: () => void;
@@ -61,17 +61,18 @@ export default function Toolbar({ onCropMode, cropMode, canvasRef }: Props) {
     const existingRotate = ops.find((op): op is RotateOp => op.type === "rotate");
 
     if (existingCrop && sourceImage) {
-      // Compute stage1 dimensions with the CURRENT (pre-new-rotation) total rotation
       const currentDegrees    = existingRotate?.degrees ?? 0;
       const dimensionsSwapped = currentDegrees === 90 || currentDegrees === 270;
       const stageWidth  = dimensionsSwapped ? sourceImage.naturalHeight : sourceImage.naturalWidth;
       const stageHeight = dimensionsSwapped ? sourceImage.naturalWidth  : sourceImage.naturalHeight;
 
-      // Compute new total rotation
       const newDegrees = ((currentDegrees + degrees) % 360) as 0 | 90 | 180 | 270;
 
-      // Transform crop to the new coordinate space and update both ops atomically
-      const transformedCrop = transformCropForRotation(existingCrop, degrees, stageWidth, stageHeight);
+      // Pass current flip state so the formula picks the correct axis mapping
+      const flipHActive = ops.some((op): op is FlipOp => op.type === "flip" && op.direction === "horizontal");
+      const flipVActive = ops.some((op): op is FlipOp => op.type === "flip" && op.direction === "vertical");
+
+      const transformedCrop = transformCropForRotation(existingCrop, degrees, stageWidth, stageHeight, flipHActive, flipVActive);
       const opsWithoutRotateAndCrop = ops.filter((op) => op.type !== "rotate" && op.type !== "crop");
       const updatedOps: Op[] = [
         ...opsWithoutRotateAndCrop,
@@ -81,6 +82,33 @@ export default function Toolbar({ onCropMode, cropMode, canvasRef }: Props) {
       store.pushOpsSnapshot(updatedOps);
     } else {
       store.pushOp({ type: "rotate", degrees });
+    }
+  };
+
+  const handleFlip = (direction: "horizontal" | "vertical") => {
+    const existingCrop = ops.find((op): op is CropOp => op.type === "crop");
+
+    if (existingCrop && sourceImage) {
+      // Flip doesn't swap dimensions; only rotation does
+      const existingRotate    = ops.find((op): op is RotateOp => op.type === "rotate");
+      const currentDegrees    = existingRotate?.degrees ?? 0;
+      const dimensionsSwapped = currentDegrees === 90 || currentDegrees === 270;
+      const stageWidth  = dimensionsSwapped ? sourceImage.naturalHeight : sourceImage.naturalWidth;
+      const stageHeight = dimensionsSwapped ? sourceImage.naturalWidth  : sourceImage.naturalHeight;
+
+      const transformedCrop = transformCropForFlip(existingCrop, direction, stageWidth, stageHeight);
+
+      // Toggle the flip (same as mergeOp logic for flip)
+      const existingFlip       = ops.find((op): op is FlipOp => op.type === "flip" && op.direction === direction);
+      const opsWithoutFlipAndCrop = ops.filter((op) => !(op.type === "flip" && op.direction === direction) && op.type !== "crop");
+      const updatedOps: Op[] = [
+        ...opsWithoutFlipAndCrop,
+        transformedCrop,
+        ...(existingFlip ? [] : [{ type: "flip" as const, direction }]),
+      ];
+      store.pushOpsSnapshot(updatedOps);
+    } else {
+      store.pushOp({ type: "flip", direction });
     }
   };
 
@@ -125,8 +153,8 @@ export default function Toolbar({ onCropMode, cropMode, canvasRef }: Props) {
       <div className="flex flex-col gap-1">
         <span className="text-xs text-gray-400 font-medium">Flip</span>
         <div className="flex gap-1">
-          <ToolBtn onClick={() => store.pushOp({ type: "flip", direction: "horizontal" })}>⇔ H</ToolBtn>
-          <ToolBtn onClick={() => store.pushOp({ type: "flip", direction: "vertical"   })}>⇕ V</ToolBtn>
+          <ToolBtn onClick={() => handleFlip("horizontal")}>⇔ H</ToolBtn>
+          <ToolBtn onClick={() => handleFlip("vertical")}>⇕ V</ToolBtn>
         </div>
       </div>
 

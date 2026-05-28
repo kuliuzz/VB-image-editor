@@ -46,8 +46,16 @@ export function renderToCanvas(
   rotateFlipCtx.save();
   rotateFlipCtx.translate(rotatedWidth / 2, rotatedHeight / 2);
   if (rotationDegrees) rotateFlipCtx.rotate((rotationDegrees * Math.PI) / 180);
-  if (flipHOp) rotateFlipCtx.scale(-1,  1);
-  if (flipVOp) rotateFlipCtx.scale( 1, -1);
+  // After a 90° or 270° rotation the context axes are transposed, so the scale
+  // axes must be swapped to produce the correct VISUAL flip of stage1
+  // (and match what Sharp's .flop()/.flip() produce on the same rotation).
+  if (dimensionsSwapped) {
+    if (flipHOp) rotateFlipCtx.scale( 1, -1);
+    if (flipVOp) rotateFlipCtx.scale(-1,  1);
+  } else {
+    if (flipHOp) rotateFlipCtx.scale(-1,  1);
+    if (flipVOp) rotateFlipCtx.scale( 1, -1);
+  }
   rotateFlipCtx.drawImage(sourceImage, -sourceWidth / 2, -sourceHeight / 2);
   rotateFlipCtx.restore();
 

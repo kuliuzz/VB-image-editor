@@ -47,9 +47,11 @@ export default function Editor() {
 
   const enterCropMode = () => {
     if (!sourceImage) return;
-    const rotateFlipOps = ops.filter((o) => o.type === "rotate" || o.type === "flip");
+    // Render with rotate + flip + existing crop so the user sees their current
+    // cropped state and can refine it, not the full original image.
+    const previewOps = ops.filter((o) => o.type === "rotate" || o.type === "flip" || o.type === "crop");
     const tempCanvas = document.createElement("canvas");
-    renderToCanvas(tempCanvas, sourceImage, rotateFlipOps);
+    renderToCanvas(tempCanvas, sourceImage, previewOps);
     setPreCropCanvas(tempCanvas);
     setCropMode(true);
   };
@@ -205,7 +207,19 @@ export default function Editor() {
         {cropMode && preCropCanvas && (
           <CropOverlay
             sourceCanvas={preCropCanvas}
-            onApply={(crop) => { pushOp({ type: "crop", ...crop }); setCropMode(false); }}
+            onApply={(newCrop) => {
+              const existingCrop = ops.find((o) => o.type === "crop") as { type: "crop"; x: number; y: number; width: number; height: number } | undefined;
+              // New crop coordinates are relative to the currently-cropped image,
+              // so offset by the existing crop's origin to get stage1 coordinates.
+              pushOp({
+                type: "crop",
+                x: (existingCrop?.x ?? 0) + newCrop.x,
+                y: (existingCrop?.y ?? 0) + newCrop.y,
+                width: newCrop.width,
+                height: newCrop.height,
+              });
+              setCropMode(false);
+            }}
             onCancel={() => setCropMode(false)}
           />
         )}
